@@ -1,0 +1,5 @@
+aelog>=1.0.3
+ujson
+aredis>=1.1.3
+hiredis
+redis>=3.0.0
