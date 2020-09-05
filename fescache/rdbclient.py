@@ -8,21 +8,21 @@
 """
 import atexit
 from collections import MutableMapping
-from typing import Any, Dict, List, NoReturn, Union
+from typing import Any, Dict, List, NoReturn, Optional, Union
 
 import aelog
 import redis
 import ujson
 from redis import RedisError
 
-from ._base import Session, SESSION_EXPIRED, LONG_EXPIRED, EXPIRED
+from ._base import BaseRdbClient, EXPIRED, LONG_EXPIRED, SESSION_EXPIRED, Session
 from .err import RedisClientError
 from .utils import ignore_error
 
-__all__ = ("RedisClient",)
+__all__ = ("RdbClient",)
 
 
-class RedisClient(object):
+class RdbClient(BaseRdbClient):
     """
     redis 工具类
     """
@@ -39,18 +39,10 @@ class RedisClient(object):
             passwd: redis password
             pool_size: redis pool size
         """
-        self.pool: redis.ConnectionPool = None
-        self.redis_db: redis.StrictRedis = None
-        self.host = host
-        self.port = port
-        self.dbname = dbname
-        self.passwd = passwd
-        self.pool_size = pool_size
-        self._account_key = "account_to_session"
+        self.pool: Optional[redis.ConnectionPool] = None
+        self.redis_db: Optional[redis.StrictRedis] = None
 
-        if app is not None:
-            self.init_app(app, host=self.host, port=self.port, dbname=self.dbname, passwd=self.passwd,
-                          pool_size=self.pool_size)
+        super().__init__(app, host=host, port=port, dbname=dbname, passwd=passwd, pool_size=pool_size)
 
     def init_app(self, app, *, host: str = None, port: int = None, dbname: int = None, passwd: str = "",
                  pool_size: int = None):
@@ -66,13 +58,7 @@ class RedisClient(object):
         Returns:
 
         """
-        host = host or app.config.get("FESCACHE_REDIS_HOST", None) or self.host
-        port = port or app.config.get("FESCACHE_REDIS_PORT", None) or self.port
-        dbname = dbname or app.config.get("FESCACHE_REDIS_DBNAME", None) or self.dbname
-        passwd = passwd or app.config.get("FESCACHE_REDIS_PASSWD", None) or self.passwd
-        pool_size = pool_size or app.config.get("FESCACHE_REDIS_POOL_SIZE", None) or self.pool_size
-
-        passwd = passwd if passwd is None else str(passwd)
+        super().init_app(app, host=host, port=port, dbname=dbname, passwd=passwd, pool_size=pool_size)
 
         @app.before_first_request
         def open_connection():
@@ -101,6 +87,7 @@ class RedisClient(object):
             if self.pool:
                 self.pool.disconnect()
 
+    # noinspection DuplicatedCode
     def init_engine(self, *, host: str = None, port: int = None, dbname: int = None, passwd: str = "",
                     pool_size: int = None):
         """
@@ -114,13 +101,7 @@ class RedisClient(object):
         Returns:
 
         """
-        host = host or self.host
-        port = port or self.port
-        dbname = dbname or self.dbname
-        passwd = passwd or self.passwd
-        pool_size = pool_size or self.pool_size
-
-        passwd = passwd if passwd is None else str(passwd)
+        super().init_engine(host=host, port=port, dbname=dbname, passwd=passwd, pool_size=pool_size)
         # 返回值都做了解码，应用层不需要再decode
         self.pool = redis.ConnectionPool(host=host, port=port, db=dbname, password=passwd, decode_responses=True,
                                          max_connections=pool_size)
@@ -172,20 +153,6 @@ class RedisClient(object):
             self.save_update_hash_data(self._account_key, field_name=session.account_id,
                                        hash_data=session.session_id, ex=LONG_EXPIRED)
             return session.session_id
-
-    @staticmethod
-    def response_dumps(dump_responses: bool, session: Session) -> Dict:
-        session_data = dict(vars(session))
-        # 是否对每个键值进行dump
-        if dump_responses:
-            hash_data = {}
-            for hash_key, hash_val in session_data.items():
-                if not isinstance(hash_val, str):
-                    with ignore_error():
-                        hash_val = ujson.dumps(hash_val)
-                hash_data[hash_key] = hash_val
-            session_data = hash_data
-        return session_data
 
     def delete_session(self, session_id: str, delete_key: bool = True) -> NoReturn:
         """

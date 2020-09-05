@@ -7,7 +7,7 @@
 @time: 18-12-25 下午2:08
 """
 
-__all__ = ("Error", "HttpError", "RedisClientError", "RedisConnectError", "FuncArgsError", )
+__all__ = ("Error", "HttpError", "RedisClientError", "RedisConnectError", "FuncArgsError", "RedisTimeoutError")
 
 
 class Error(Exception):
@@ -51,6 +51,13 @@ class RedisClientError(Error):
 
 
 class RedisConnectError(RedisClientError):
+    """
+    主要处理redis的connect error
+    """
+    pass
+
+
+class RedisTimeoutError(RedisClientError):
     """
     主要处理redis的connect error
     """
