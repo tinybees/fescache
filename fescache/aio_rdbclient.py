@@ -15,7 +15,7 @@ import aelog
 import ujson
 from aredis import ConnectionError, ConnectionPool, RedisError, StrictRedis, TimeoutError
 
-from ._base import BaseStrictRedis, EXPIRED, LONG_EXPIRED, SESSION_EXPIRED, Session
+from ._base import BaseStrictRedis, EXPIRED, SESSION_EXPIRED, Session
 from .err import FuncArgsError, RedisClientError, RedisConnectError, RedisTimeoutError
 from .utils import ignore_error
 
@@ -157,31 +157,28 @@ class AIOStrictRedis(BaseStrictRedis, StrictRedis):
             await self.hmset(session.session_id, session_data)
             await self.expire(session.session_id, ex)
         # 清除老的令牌
-        old_session_id = await self.get_hash_data(self._account_key, field_name=session.account_id)
-        with ignore_error():
-            await self.delete_session(str(old_session_id), False)
+        old_session_id = await self.get_usual_data(session.account_id, load_responses=False)
+        if old_session_id:
+            with ignore_error():
+                await self.delete_session(str(old_session_id))
         # 更新新的令牌
-        await self.save_hash_data(self._account_key, field_name=session.account_id,
-                                  hash_data=session.session_id, ex=LONG_EXPIRED)
+        await self.save_usual_data(session.account_id, session.session_id, ex=ex)
         return session.session_id
 
-    async def delete_session(self, session_id: str, delete_key: bool = True):
+    async def delete_session(self, session_id: str):
         """
         利用hash map删除session
         Args:
             session_id: session id
-            delete_key: 删除account到session的account key
         Returns:
 
         """
 
         with self.catch_error():
-            session_id_ = await self.hget(session_id, "session_id")
-            if session_id_ != session_id:
-                raise RedisClientError("invalid session_id, session_id={}".format(session_id))
-            exist_keys = []
+            exist_keys = [session_id, ]
             session_data = await self.get_session(session_id)
             if session_data:
+                exist_keys.append(session_data.account_id)
                 exist_keys.append(session_data.org_id)
                 exist_keys.append(session_data.role_id)
                 exist_keys.append(session_data.permission_id)
@@ -192,10 +189,6 @@ class AIOStrictRedis(BaseStrictRedis, StrictRedis):
 
                 with ignore_error():  # 删除已经存在的和账户相关的缓存key
                     await self.delete_keys(exist_keys)
-                    if delete_key is True:
-                        await self.hdel(self._account_key, session_data.account_id)
-
-            await self.delete(session_id)
 
     async def update_session(self, session: Session, is_dump: bool = False,
                              ex: int = SESSION_EXPIRED) -> None:
@@ -214,8 +207,7 @@ class AIOStrictRedis(BaseStrictRedis, StrictRedis):
             await self.hmset(session.session_id, session_data)
             await self.expire(session.session_id, ex)
         # 更新令牌
-        await self.save_hash_data(self._account_key, field_name=session.account_id,
-                                  hash_data=session.session_id, ex=LONG_EXPIRED)
+        await self.save_usual_data(session.account_id, session.session_id, ex=ex)
 
     async def get_session(self, session_id: str, ex: int = SESSION_EXPIRED,
                           load_responses: bool = False) -> Optional[Session]:
@@ -233,6 +225,7 @@ class AIOStrictRedis(BaseStrictRedis, StrictRedis):
             session_data = await self.hgetall(session_id)
             if session_data:
                 await self.expire(session_id, ex)
+                await self.expire(session_data["account_id"], ex)
                 # 返回的键值对是否做load
                 if load_responses:
                     hash_data = {}
@@ -329,7 +322,7 @@ class AIOStrictRedis(BaseStrictRedis, StrictRedis):
 
         return hash_data
 
-    async def get_list_data(self, name: str, start: int = 0, end: int = -1, ex: int = EXPIRED) -> List:
+    async def get_list_data(self, name: str, start: int = 0, end: int = -1, ex: int = EXPIRED) -> Optional[List]:
         """
         获取redis的列表中的数据
         Args:
@@ -342,7 +335,8 @@ class AIOStrictRedis(BaseStrictRedis, StrictRedis):
         """
         with self.catch_error():
             data = await self.lrange(name, start=start, end=end)
-            await self.expire(name, ex)
+            if data:
+                await self.expire(name, ex)
         return data
 
     async def save_list_data(self, name: str, list_data: Union[List, str], save_to_left: bool = True,
@@ -383,6 +377,29 @@ class AIOStrictRedis(BaseStrictRedis, StrictRedis):
             await self.set(name, value, ex)
         return name
 
+    async def get_usual_data(self, name: str, load_responses: bool = True, ex: int = EXPIRED
+                             ) -> Union[Dict, str, None]:
+        """
+        获取name对应的值
+        Args:
+            name: redis key的名称
+            load_responses: 是否转码默认转码
+            ex: 过期时间，单位秒
+        Returns:
+            反序列化对象
+        """
+        with self.catch_error():
+            data = await self.get(name)
+
+            if data:  # 保证key存在时设置过期时间
+                await self.expire(name, ex)
+
+                if load_responses:
+                    with ignore_error():
+                        data = ujson.loads(data)
+
+        return data
+
     async def incrbynumber(self, name: str, amount: int = 1, ex: int = EXPIRED) -> str:
         """
 
@@ -400,31 +417,7 @@ class AIOStrictRedis(BaseStrictRedis, StrictRedis):
             await self.expire(name, ex)
         return name
 
-    async def get_usual_data(self, name: str, load_responses: bool = True, update_expire: bool = True,
-                             ex: int = EXPIRED) -> Union[Dict, str]:
-        """
-        获取name对应的值
-        Args:
-            name: redis key的名称
-            load_responses: 是否转码默认转码
-            update_expire: 是否更新过期时间
-            ex: 过期时间，单位秒
-        Returns:
-            反序列化对象
-        """
-        with self.catch_error():
-            data = await self.get(name)
-
-            if data is not None and update_expire:  # 保证key存在时设置过期时间
-                await self.expire(name, ex)
-
-            if load_responses:
-                with ignore_error():
-                    data = ujson.loads(data)
-
-        return data
-
-    async def is_exist(self, name: str) -> bool:
+    async def is_exists(self, name: str) -> bool:
         """
         判断redis key是否存在
         Args:
