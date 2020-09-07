@@ -76,8 +76,8 @@ class RdbClient(BaseStrictRedis, Redis):
 
             """
             # 返回值都做了解码，应用层不需要再decode
-            self.pool = redis.ConnectionPool(host=host, port=port, db=dbname, password=passwd,
-                                             decode_responses=True, max_connections=pool_size, **self.kwargs)
+            self.pool = redis.ConnectionPool(host=self.host, port=self.port, db=self.dbname, password=self.passwd,
+                                             decode_responses=True, max_connections=self.pool_size, **self.kwargs)
             super(BaseStrictRedis, self).__init__(connection_pool=self.pool, decode_responses=True)
 
         @atexit.register
@@ -113,8 +113,8 @@ class RdbClient(BaseStrictRedis, Redis):
         super().init_engine(host=host, port=port, dbname=dbname, passwd=passwd, pool_size=pool_size)
 
         # 返回值都做了解码，应用层不需要再decode
-        self.pool = redis.ConnectionPool(host=host, port=port, db=dbname, password=passwd,
-                                         decode_responses=True, max_connections=pool_size, **self.kwargs)
+        self.pool = redis.ConnectionPool(host=self.host, port=self.port, db=self.dbname, password=self.passwd,
+                                         decode_responses=True, max_connections=self.pool_size, **self.kwargs)
         super(BaseStrictRedis, self).__init__(connection_pool=self.pool, decode_responses=True)
 
         @atexit.register

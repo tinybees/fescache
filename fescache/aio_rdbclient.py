@@ -75,8 +75,8 @@ class AIORdbClient(BaseStrictRedis, StrictRedis):
 
             """
             # 返回值都做了解码，应用层不需要再decode
-            self.pool = ConnectionPool(host=host, port=port, db=dbname, password=passwd,
-                                       decode_responses=True, max_connections=pool_size, **self.kwargs)
+            self.pool = ConnectionPool(host=self.host, port=self.port, db=self.dbname, password=self.passwd,
+                                       decode_responses=True, max_connections=self.pool_size, **self.kwargs)
             super(BaseStrictRedis, self).__init__(connection_pool=self.pool, decode_responses=True)
 
         @app.listener('after_server_stop')
@@ -112,8 +112,8 @@ class AIORdbClient(BaseStrictRedis, StrictRedis):
         super().init_engine(host=host, port=port, dbname=dbname, passwd=passwd, pool_size=pool_size)
 
         # 返回值都做了解码，应用层不需要再decode
-        self.pool = ConnectionPool(host=host, port=port, db=dbname, password=passwd,
-                                   decode_responses=True, max_connections=pool_size, **self.kwargs)
+        self.pool = ConnectionPool(host=self.host, port=self.port, db=self.dbname, password=self.passwd,
+                                   decode_responses=True, max_connections=self.pool_size, **self.kwargs)
         super(BaseStrictRedis, self).__init__(connection_pool=self.pool, decode_responses=True)
 
         @atexit.register
