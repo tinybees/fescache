@@ -82,7 +82,6 @@ class BaseStrictRedis(object):
         self.dbname = dbname
         self.passwd = passwd
         self.pool_size = pool_size
-        self._account_key = "account_to_session"
 
         if app is not None:
             self.init_app(app, host=self.host, port=self.port, dbname=self.dbname, passwd=self.passwd,

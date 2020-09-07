@@ -28,7 +28,7 @@ class AIOStrictRedis(BaseStrictRedis, StrictRedis):
     """
 
     def __init__(self, app=None, *, host: str = "127.0.0.1", port: int = 6379, dbname: int = 0, passwd: str = "",
-                 pool_size: int = 50):
+                 pool_size: int = 50, connect_timeout: int = 10, **kwargs):
         """
         redis 非阻塞工具类
         Args:
@@ -38,12 +38,16 @@ class AIOStrictRedis(BaseStrictRedis, StrictRedis):
             dbname: database name
             passwd: redis password
             pool_size: redis pool size
+            connect_timeout: 连接超时时间
+            kwargs: other kwargs
         """
+        self.kwargs: Dict = kwargs
+        self.kwargs["connect_timeout"] = connect_timeout
         self.pool: Optional[ConnectionPool] = None
         super().__init__(app, host=host, port=port, dbname=dbname, passwd=passwd, pool_size=pool_size)
 
     def init_app(self, app, *, host: str = None, port: int = None, dbname: int = None, passwd: str = "",
-                 pool_size: int = None) -> None:
+                 pool_size: int = None, connect_timeout: int = 10, **kwargs) -> None:
         """
         redis 非阻塞工具类
         Args:
@@ -53,9 +57,13 @@ class AIOStrictRedis(BaseStrictRedis, StrictRedis):
             dbname: database name
             passwd: redis password
             pool_size: redis pool size
+            connect_timeout: 连接超时时间
+            kwargs: other kwargs
         Returns:
 
         """
+        self.kwargs.update(kwargs)
+        self.kwargs["connect_timeout"] = connect_timeout
         super().init_app(app, host=host, port=port, dbname=dbname, passwd=passwd, pool_size=pool_size)
 
         @app.listener('before_server_start')
@@ -69,7 +77,7 @@ class AIOStrictRedis(BaseStrictRedis, StrictRedis):
             """
             # 返回值都做了解码，应用层不需要再decode
             self.pool = ConnectionPool(host=host, port=port, db=dbname, password=passwd,
-                                       decode_responses=True, max_connections=pool_size)
+                                       decode_responses=True, max_connections=pool_size, **self.kwargs)
             super(BaseStrictRedis, self).__init__(connection_pool=self.pool, decode_responses=True)
 
         @app.listener('after_server_stop')
@@ -86,7 +94,7 @@ class AIOStrictRedis(BaseStrictRedis, StrictRedis):
 
     # noinspection DuplicatedCode
     def init_engine(self, *, host: str = None, port: int = None, dbname: int = None, passwd: str = "",
-                    pool_size: int = None) -> None:
+                    pool_size: int = None, connect_timeout: int = 10, **kwargs) -> None:
         """
         redis 非阻塞工具类
         Args:
@@ -95,14 +103,18 @@ class AIOStrictRedis(BaseStrictRedis, StrictRedis):
             dbname: database name
             passwd: redis password
             pool_size: redis pool size
+            connect_timeout: 连接超时时间
+            kwargs: other kwargs
         Returns:
 
         """
+        self.kwargs.update(kwargs)
+        self.kwargs["connect_timeout"] = connect_timeout
         super().init_engine(host=host, port=port, dbname=dbname, passwd=passwd, pool_size=pool_size)
 
         # 返回值都做了解码，应用层不需要再decode
         self.pool = ConnectionPool(host=host, port=port, db=dbname, password=passwd,
-                                   decode_responses=True, max_connections=pool_size)
+                                   decode_responses=True, max_connections=pool_size, **self.kwargs)
         super(BaseStrictRedis, self).__init__(connection_pool=self.pool, decode_responses=True)
 
         @atexit.register
@@ -163,9 +175,10 @@ class AIOStrictRedis(BaseStrictRedis, StrictRedis):
                 await self.delete_session(str(old_session_id))
         # 更新新的令牌
         await self.save_usual_data(session.account_id, session.session_id, ex=ex)
+
         return session.session_id
 
-    async def delete_session(self, session_id: str):
+    async def delete_session(self, session_id: str) -> None:
         """
         利用hash map删除session
         Args:
@@ -206,6 +219,7 @@ class AIOStrictRedis(BaseStrictRedis, StrictRedis):
         with self.catch_error():
             await self.hmset(session.session_id, session_data)
             await self.expire(session.session_id, ex)
+            await self.expire(session.account_id, ex)
         # 更新令牌
         await self.save_usual_data(session.account_id, session.session_id, ex=ex)
 
