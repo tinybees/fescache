@@ -7,9 +7,8 @@
 @time: 18-12-25 下午5:15
 """
 import atexit
-from collections import MutableMapping
 from contextlib import contextmanager
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, Generator, List, Optional, Union
 
 import aelog
 import ujson
@@ -19,16 +18,16 @@ from ._base import BaseStrictRedis, EXPIRED, SESSION_EXPIRED, Session
 from .err import FuncArgsError, RedisClientError, RedisConnectError, RedisTimeoutError
 from .utils import ignore_error
 
-__all__ = ("AIOStrictRedis",)
+__all__ = ("AIORdbClient",)
 
 
-class AIOStrictRedis(BaseStrictRedis, StrictRedis):
+class AIORdbClient(BaseStrictRedis, StrictRedis):
     """
     redis 非阻塞工具类
     """
 
     def __init__(self, app=None, *, host: str = "127.0.0.1", port: int = 6379, dbname: int = 0, passwd: str = "",
-                 pool_size: int = 50, connect_timeout: int = 10, **kwargs):
+                 pool_size: int = 50, connect_timeout: int = 10, **kwargs) -> None:
         """
         redis 非阻塞工具类
         Args:
@@ -130,7 +129,7 @@ class AIOStrictRedis(BaseStrictRedis, StrictRedis):
                 self.pool.disconnect()
 
     @contextmanager
-    def catch_error(self, ):
+    def catch_error(self, ) -> Generator[None, None, None]:
         """
 
         Args:
@@ -163,13 +162,13 @@ class AIOStrictRedis(BaseStrictRedis, StrictRedis):
         if not isinstance(session, Session):
             raise FuncArgsError(f"session value error, must be Session Type.")
 
-        session_data: Dict[str, Any] = self.response_dumps(is_dump, session)
+        session_data: Dict[str, Any] = self.response_dumps(is_dump, session.to_dict())
 
         with self.catch_error():
             await self.hmset(session.session_id, session_data)
             await self.expire(session.session_id, ex)
         # 清除老的令牌
-        old_session_id = await self.get_usual_data(session.account_id, load_responses=False)
+        old_session_id = await self.get_usual_data(session.account_id, is_load=False)
         if old_session_id:
             with ignore_error():
                 await self.delete_session(str(old_session_id))
@@ -188,20 +187,10 @@ class AIOStrictRedis(BaseStrictRedis, StrictRedis):
         """
 
         with self.catch_error():
-            exist_keys = [session_id, ]
             session_data = await self.get_session(session_id)
             if session_data:
-                exist_keys.append(session_data.account_id)
-                exist_keys.append(session_data.org_id)
-                exist_keys.append(session_data.role_id)
-                exist_keys.append(session_data.permission_id)
-                exist_keys.append(session_data.static_permission_id)
-                exist_keys.append(session_data.dynamic_permission_id)
-                exist_keys.append(session_data.page_id)
-                exist_keys.append(session_data.page_menu_id)
-
                 with ignore_error():  # 删除已经存在的和账户相关的缓存key
-                    await self.delete_keys(exist_keys)
+                    await self.delete_keys(self._get_session_keys(session_data))
 
     async def update_session(self, session: Session, is_dump: bool = False,
                              ex: int = SESSION_EXPIRED) -> None:
@@ -209,12 +198,12 @@ class AIOStrictRedis(BaseStrictRedis, StrictRedis):
         利用hash map更新session
         Args:
             session: Session实例
-            ex: 过期时间，单位秒
             is_dump: 是否对每个键值进行dump
+            ex: 过期时间，单位秒
         Returns:
 
         """
-        session_data = self.response_dumps(is_dump, session)
+        session_data = self.response_dumps(is_dump, session.to_dict())
 
         with self.catch_error():
             await self.hmset(session.session_id, session_data)
@@ -224,13 +213,13 @@ class AIOStrictRedis(BaseStrictRedis, StrictRedis):
         await self.save_usual_data(session.account_id, session.session_id, ex=ex)
 
     async def get_session(self, session_id: str, ex: int = SESSION_EXPIRED,
-                          load_responses: bool = False) -> Optional[Session]:
+                          is_load: bool = False) -> Optional[Session]:
         """
         获取session
         Args:
             session_id: session id
             ex: 过期时间，单位秒
-            load_responses: 结果的键值是否进行load
+            is_load: 结果的键值是否进行load
         Returns:
 
         """
@@ -241,13 +230,7 @@ class AIOStrictRedis(BaseStrictRedis, StrictRedis):
                 await self.expire(session_id, ex)
                 await self.expire(session_data["account_id"], ex)
                 # 返回的键值对是否做load
-                if load_responses:
-                    hash_data = {}
-                    for hash_key, hash_val in session_data.items():
-                        with ignore_error():
-                            hash_val = ujson.loads(hash_val)
-                        hash_data[hash_key] = hash_val
-                    session_data = hash_data
+                session_data = self.responses_loads(is_load, session_data)
                 session_value = Session(session_data.pop('account_id'), session_id=session_data.pop('session_id'),
                                         org_id=session_data.pop("org_id"), role_id=session_data.pop("role_id"),
                                         permission_id=session_data.pop("permission_id"), **session_data)
@@ -266,6 +249,7 @@ class AIOStrictRedis(BaseStrictRedis, StrictRedis):
             raise RedisClientError("invalid session_id, session_id={}".format(session_id))
         return session
 
+    # noinspection DuplicatedCode
     async def save_hash_data(self, name: str, hash_data: Union[Dict, str], field_name: str = None,
                              is_dump: bool = False, ex: int = EXPIRED) -> str:
         """
@@ -284,17 +268,10 @@ class AIOStrictRedis(BaseStrictRedis, StrictRedis):
                 hash_data_ = hash_data if isinstance(hash_data, str) else ujson.dumps(hash_data)
                 await self.hset(name, field_name, hash_data_)
             else:
-                if not isinstance(hash_data, MutableMapping):
+                if not isinstance(hash_data, Dict):
                     raise ValueError("hash data error, must be MutableMapping.")
                 # 是否对每个键值进行dump
-                if is_dump:
-                    rs_data = {}
-                    for hash_key, hash_val in hash_data.items():
-                        if not isinstance(hash_val, str):
-                            with ignore_error():
-                                hash_val = ujson.dumps(hash_val)
-                        rs_data[hash_key] = hash_val
-                    hash_data = rs_data
+                hash_data = self.response_dumps(is_dump, hash_data)
                 await self.hmset(name, hash_data)
 
             # 设置过期时间
@@ -303,14 +280,14 @@ class AIOStrictRedis(BaseStrictRedis, StrictRedis):
         return name
 
     async def get_hash_data(self, name: str, field_name: str = None, ex: int = EXPIRED,
-                            load_responses: bool = False) -> Union[Dict, str, None]:
+                            is_load: bool = False) -> Union[Dict, str, None]:
         """
         获取hash对象field_name对应的值
         Args:
             name: redis hash key的名称
             field_name: 获取的hash对象中属性的名称
             ex: 过期时间，单位秒
-            load_responses: 结果的键值是否进行load
+            is_load: 结果的键值是否进行load
         Returns:
             反序列化对象
         """
@@ -318,19 +295,14 @@ class AIOStrictRedis(BaseStrictRedis, StrictRedis):
             if field_name:
                 hash_data = await self.hget(name, field_name)
                 # 返回的键值对是否做load
-                if load_responses:
+                if hash_data and is_load:
                     with ignore_error():
                         hash_data = ujson.loads(hash_data)
             else:
                 hash_data = await self.hgetall(name)
                 # 返回的键值对是否做load
-                if load_responses:
-                    rs_data = {}
-                    for hash_key, hash_val in hash_data.items():
-                        with ignore_error():
-                            hash_val = ujson.loads(hash_val)
-                        rs_data[hash_key] = hash_val
-                    hash_data = rs_data
+                if hash_data:
+                    hash_data = self.responses_loads(is_load, hash_data)
             # 设置过期时间
             await self.expire(name, ex)
 
@@ -351,6 +323,7 @@ class AIOStrictRedis(BaseStrictRedis, StrictRedis):
             data = await self.lrange(name, start=start, end=end)
             if data:
                 await self.expire(name, ex)
+
         return data
 
     async def save_list_data(self, name: str, list_data: Union[List, str], save_to_left: bool = True,
@@ -391,13 +364,13 @@ class AIOStrictRedis(BaseStrictRedis, StrictRedis):
             await self.set(name, value, ex)
         return name
 
-    async def get_usual_data(self, name: str, load_responses: bool = True, ex: int = EXPIRED
+    async def get_usual_data(self, name: str, is_load: bool = True, ex: int = EXPIRED
                              ) -> Union[Dict, str, None]:
         """
         获取name对应的值
         Args:
             name: redis key的名称
-            load_responses: 是否转码默认转码
+            is_load: 是否转码默认转码
             ex: 过期时间，单位秒
         Returns:
             反序列化对象
@@ -408,7 +381,7 @@ class AIOStrictRedis(BaseStrictRedis, StrictRedis):
             if data:  # 保证key存在时设置过期时间
                 await self.expire(name, ex)
 
-                if load_responses:
+                if is_load:
                     with ignore_error():
                         data = ujson.loads(data)
 
@@ -416,7 +389,7 @@ class AIOStrictRedis(BaseStrictRedis, StrictRedis):
 
     async def incrbynumber(self, name: str, amount: int = 1, ex: int = EXPIRED) -> str:
         """
-
+        通过给定的值对已有的值进行递增
         Args:
 
         Returns:
@@ -443,7 +416,7 @@ class AIOStrictRedis(BaseStrictRedis, StrictRedis):
             rs = await self.exists(name)
         return rs
 
-    async def delete_keys(self, names: List[str]):
+    async def delete_keys(self, names: List[str]) -> None:
         """
         删除一个或多个redis key
         Args:

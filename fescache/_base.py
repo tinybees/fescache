@@ -10,7 +10,7 @@ import secrets
 import uuid
 
 __all__ = ("Session", "LONG_EXPIRED", "EXPIRED", "SESSION_EXPIRED", "DAY3_EXPIRED", "DAY7_EXPIRED",
-           "DAY15_EXPIRED", "DAY30_EXPIRED", "BaseStrictRedis")
+           "DAY15_EXPIRED", "DAY30_EXPIRED", "SHORT_EXPIRED", "BaseStrictRedis")
 
 from typing import Dict, Any
 
@@ -19,6 +19,7 @@ import ujson
 from fescache import ignore_error
 
 SESSION_EXPIRED: int = 30 * 60  # session过期时间
+SHORT_EXPIRED: int = 60 * 60  # 短session过期时间
 EXPIRED: int = 12 * 60 * 60  # 通用过期时间
 LONG_EXPIRED: int = 24 * 60 * 60  # 最长过期时间
 DAY3_EXPIRED: int = 3 * LONG_EXPIRED
@@ -132,23 +133,56 @@ class BaseStrictRedis(object):
         self.passwd = passwd if passwd is None else str(passwd)
 
     @staticmethod
-    def response_dumps(is_dump: bool, session: Session) -> Dict[str, Any]:
+    def response_dumps(is_dump: bool, hash_data: Dict) -> Dict[str, Any]:
         """
         结果dump
         Args:
             is_dump: 是否dump
-            session: session
+            hash_data: hash data
         Returns:
 
         """
-        session_data = session.to_dict()
         # 是否对每个键值进行dump
         if is_dump:
-            hash_data = {}
-            for hash_key, hash_val in session_data.items():
+            hash_data_ = {}
+            for hash_key, hash_val in hash_data.items():
                 if not isinstance(hash_val, str):
                     with ignore_error():
                         hash_val = ujson.dumps(hash_val)
-                hash_data[hash_key] = hash_val
-            session_data = hash_data
-        return session_data
+                hash_data_[hash_key] = hash_val
+            hash_data = hash_data_
+
+        return hash_data
+
+    @staticmethod
+    def responses_loads(is_load: bool, hash_data: Dict):
+        """
+        结果load
+        Args:
+            is_load: 是否load
+            hash_data: hash data
+        Returns:
+
+        """
+        if is_load:
+            hash_data_ = {}
+            for hash_key, hash_val in hash_data.items():
+                with ignore_error():
+                    hash_val = ujson.loads(hash_val)
+                hash_data_[hash_key] = hash_val
+            hash_data = hash_data_
+
+        return hash_data
+
+    @staticmethod
+    def _get_session_keys(session_data: Session):
+        """
+        获取session中有用的key
+        Args:
+            session_data: session
+        Returns:
+
+        """
+        return [session_data.session_id, session_data.account_id, session_data.org_id, session_data.role_id,
+                session_data.permission_id, session_data.static_permission_id, session_data.dynamic_permission_id,
+                session_data.page_id, session_data.page_menu_id]

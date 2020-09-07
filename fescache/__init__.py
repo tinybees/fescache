@@ -13,7 +13,7 @@ from ._base import *
 __all__ = (
     "ignore_error",
 
-    "Session", "LONG_EXPIRED", "EXPIRED", "SESSION_EXPIRED", "DAY3_EXPIRED", "DAY7_EXPIRED",
+    "Session", "LONG_EXPIRED", "SHORT_EXPIRED", "EXPIRED", "SESSION_EXPIRED", "DAY3_EXPIRED", "DAY7_EXPIRED",
     "DAY15_EXPIRED", "DAY30_EXPIRED",
 
     "__version__",
