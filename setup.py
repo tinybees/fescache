@@ -36,7 +36,7 @@ setup(name='fescache',
       author='TinyBees',
       author_email='a598824322@qq.com',
       url='https://github.com/tinybees/fescache',
-      packages=['fescache', 'fescache.aioalchemy', 'fescache.dbalchemy'],
+      packages=['fescache', ],
       entry_points={},
       install_requires=['aelog>=1.0.3', 'ujson', ],
       extras_require={
