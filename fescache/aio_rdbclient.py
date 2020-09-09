@@ -13,6 +13,24 @@ from typing import Any, Dict, Generator, List, Optional, Union
 import aelog
 import ujson
 from aredis import ConnectionError, ConnectionPool, RedisError, StrictRedis, TimeoutError
+from aredis.commands.cluster import ClusterCommandMixin
+from aredis.commands.connection import ConnectionCommandMixin
+from aredis.commands.extra import ExtraCommandMixin
+from aredis.commands.geo import GeoCommandMixin
+from aredis.commands.hash import HashCommandMixin
+from aredis.commands.hyperlog import HyperLogCommandMixin
+from aredis.commands.iter import IterCommandMixin
+from aredis.commands.keys import KeysCommandMixin
+from aredis.commands.lists import ListsCommandMixin
+from aredis.commands.pubsub import PubSubCommandMixin
+from aredis.commands.scripting import ScriptingCommandMixin
+from aredis.commands.sentinel import SentinelCommandMixin
+from aredis.commands.server import ServerCommandMixin
+from aredis.commands.sets import SetsCommandMixin
+from aredis.commands.sorted_set import SortedSetCommandMixin
+from aredis.commands.streams import StreamsCommandMixin
+from aredis.commands.strings import StringsCommandMixin
+from aredis.commands.transaction import TransactionCommandMixin
 
 from ._base import BaseStrictRedis, EXPIRED, SESSION_EXPIRED, Session
 from .err import FuncArgsError, RedisClientError, RedisConnectError, RedisTimeoutError
@@ -21,7 +39,12 @@ from .utils import ignore_error
 __all__ = ("AIORdbClient",)
 
 
-class AIORdbClient(BaseStrictRedis, StrictRedis):
+class AIORdbClient(BaseStrictRedis, StrictRedis, ClusterCommandMixin, ConnectionCommandMixin,
+                   ExtraCommandMixin, GeoCommandMixin, HashCommandMixin, HyperLogCommandMixin,
+                   KeysCommandMixin, ListsCommandMixin, PubSubCommandMixin,
+                   ScriptingCommandMixin, SentinelCommandMixin, ServerCommandMixin,
+                   SetsCommandMixin, SortedSetCommandMixin, StringsCommandMixin,
+                   TransactionCommandMixin, StreamsCommandMixin, IterCommandMixin):
     """
     redis 非阻塞工具类
     """
