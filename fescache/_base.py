@@ -35,17 +35,21 @@ class Session(object):
 
     """
 
-    def __init__(self, account_id: str, *, session_id: str = None, org_id: str = None, role_id: str = None,
-                 permission_id: str = None, **kwargs):
+    def __init__(self, account_id: str, *,
+                 session_id: str = None,
+                 org_id: str = None,
+                 role_id: str = None,
+                 menu_id: str = None,
+                 static_route_id: str = None,
+                 dynamic_route_id: str = None,
+                 **kwargs):
         self.account_id = account_id  # 账户ID
         self.session_id = secrets.token_urlsafe() if not session_id else session_id  # session ID
         self.org_id = org_id or uuid.uuid4().hex  # 账户的组织结构在redis中的ID
         self.role_id = role_id or uuid.uuid4().hex  # 账户的角色在redis中的ID
-        self.permission_id = permission_id or uuid.uuid4().hex  # 账户的权限在redis中的ID
-        self.static_permission_id = uuid.uuid4().hex  # 账户的静态权限在redis中的ID
-        self.dynamic_permission_id = uuid.uuid4().hex  # 账户的动态权限在redis中的ID
-        self.page_id = uuid.uuid4().hex  # 账户的页面权限在redis中的ID
-        self.page_menu_id = uuid.uuid4().hex  # 账户的页面菜单权限在redis中的ID
+        self.menu_id = menu_id or uuid.uuid4().hex  # 账户的页面菜单权限在redis中的ID
+        self.static_route_id = static_route_id or uuid.uuid4().hex  # 账户的静态权限在redis中的ID
+        self.dynamic_route_id = dynamic_route_id or uuid.uuid4().hex  # 账户的动态权限在redis中的ID
         for k, v in kwargs.items():
             setattr(self, k, v)
 
