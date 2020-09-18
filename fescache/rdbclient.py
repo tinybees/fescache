@@ -66,19 +66,8 @@ class RdbClient(BaseStrictRedis, Redis):
         self.kwargs["socket_connect_timeout"] = connect_timeout
         super().init_app(app, host=host, port=port, dbname=dbname, passwd=passwd, pool_size=pool_size)
 
-        @app.before_first_request
-        def open_connection():
-            """
-
-            Args:
-
-            Returns:
-
-            """
-            # 返回值都做了解码，应用层不需要再decode
-            self.pool = redis.ConnectionPool(host=self.host, port=self.port, db=self.dbname, password=self.passwd,
-                                             decode_responses=True, max_connections=self.pool_size, **self.kwargs)
-            super(BaseStrictRedis, self).__init__(connection_pool=self.pool, decode_responses=True)
+        # 初始化连接
+        self.open_connection()
 
         @atexit.register
         def close_connection():
@@ -112,10 +101,8 @@ class RdbClient(BaseStrictRedis, Redis):
         self.kwargs["socket_connect_timeout"] = connect_timeout
         super().init_engine(host=host, port=port, dbname=dbname, passwd=passwd, pool_size=pool_size)
 
-        # 返回值都做了解码，应用层不需要再decode
-        self.pool = redis.ConnectionPool(host=self.host, port=self.port, db=self.dbname, password=self.passwd,
-                                         decode_responses=True, max_connections=self.pool_size, **self.kwargs)
-        super(BaseStrictRedis, self).__init__(connection_pool=self.pool, decode_responses=True)
+        # 初始化连接
+        self.open_connection()
 
         @atexit.register
         def close_connection():
@@ -128,6 +115,19 @@ class RdbClient(BaseStrictRedis, Redis):
             """
             if self.pool:
                 self.pool.disconnect()
+
+    def open_connection(self, ):
+        """
+
+        Args:
+
+        Returns:
+
+        """
+        # 返回值都做了解码，应用层不需要再decode
+        self.pool = redis.ConnectionPool(host=self.host, port=self.port, db=self.dbname, password=self.passwd,
+                                         decode_responses=True, max_connections=self.pool_size, **self.kwargs)
+        super(BaseStrictRedis, self).__init__(connection_pool=self.pool, decode_responses=True)
 
     @contextmanager
     def catch_error(self, ) -> Generator[None, None, None]:

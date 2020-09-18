@@ -1,10 +1,10 @@
 ## fescache Changelog
 
-###[1.0.0b2] - 2020-9-17
+###[1.0.0b3] - 2020-9-17
 
 #### Changed
 - 删除Session中不必要的ID,增加Session中缺少的ID
-
+- 更改不同redis初始化APP的时机,改为调用即初始化
 
 ###[1.0.0b1] - 2020-9-3
 
