@@ -256,7 +256,7 @@ class AIORdbClient(BaseStrictRedis, StrictRedis, ClusterCommandMixin, Connection
                 session_data = self.responses_loads(is_load, session_data)
                 session_value = Session(session_data.pop('account_id'), session_id=session_data.pop('session_id'),
                                         org_id=session_data.pop("org_id"), role_id=session_data.pop("role_id"),
-                                        permission_id=session_data.pop("permission_id"), **session_data)
+                                        menu_id=session_data.pop("menu_id"), **session_data)
         return session_value
 
     async def verify(self, session_id: str) -> Session:

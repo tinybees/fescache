@@ -1,5 +1,10 @@
 ## fescache Changelog
 
+###[1.0.0b4] - 2020-9-26
+
+#### Changed
+- 修复同步异步获取session因为更改session类没有更改实例化参数导致的错误
+
 ###[1.0.0b3] - 2020-9-17
 
 #### Changed
