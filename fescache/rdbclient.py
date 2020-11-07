@@ -128,6 +128,7 @@ class RdbClient(BaseStrictRedis, Redis):
         self.pool = redis.ConnectionPool(host=self.host, port=self.port, db=self.dbname, password=self.passwd,
                                          decode_responses=True, max_connections=self.pool_size, **self.kwargs)
         super(BaseStrictRedis, self).__init__(connection_pool=self.pool, decode_responses=True)
+        self.connection = super(BaseStrictRedis, self).connection
 
     @contextmanager
     def catch_error(self, ) -> Generator[None, None, None]:

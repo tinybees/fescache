@@ -188,5 +188,4 @@ class BaseStrictRedis(object):
 
         """
         return [session_data.session_id, session_data.account_id, session_data.org_id, session_data.role_id,
-                session_data.permission_id, session_data.static_permission_id, session_data.dynamic_permission_id,
-                session_data.page_id, session_data.page_menu_id]
+                session_data.menu_id, session_data.static_route_id, session_data.dynamic_route_id]
