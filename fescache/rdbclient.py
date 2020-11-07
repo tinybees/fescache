@@ -13,7 +13,7 @@ from typing import Any, Dict, Generator, List, Optional, Union
 import aelog
 import redis
 import ujson
-from redis import ConnectionError, ConnectionPool, Redis, RedisError, TimeoutError
+from redis import Connection, ConnectionError, ConnectionPool, Redis, RedisError, TimeoutError
 
 from ._base import BaseStrictRedis, EXPIRED, SESSION_EXPIRED, Session
 from .err import FuncArgsError, RedisClientError, RedisConnectError, RedisTimeoutError
@@ -44,6 +44,7 @@ class RdbClient(BaseStrictRedis, Redis):
         self.kwargs: Dict = kwargs
         self.kwargs["socket_connect_timeout"] = connect_timeout
         self.pool: Optional[ConnectionPool] = None
+        self.connection: Optional[Connection] = None
         super().__init__(app, host=host, port=port, dbname=dbname, passwd=passwd, pool_size=pool_size)
 
     def init_app(self, app, *, host: str = None, port: int = None, dbname: int = None, passwd: str = "",
@@ -128,7 +129,6 @@ class RdbClient(BaseStrictRedis, Redis):
         self.pool = redis.ConnectionPool(host=self.host, port=self.port, db=self.dbname, password=self.passwd,
                                          decode_responses=True, max_connections=self.pool_size, **self.kwargs)
         super(BaseStrictRedis, self).__init__(connection_pool=self.pool, decode_responses=True)
-        self.connection = super(BaseStrictRedis, self).connection
 
     @contextmanager
     def catch_error(self, ) -> Generator[None, None, None]:
