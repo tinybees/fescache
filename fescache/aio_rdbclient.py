@@ -113,6 +113,7 @@ class AIORdbClient(BaseStrictRedis, StrictRedis, ClusterCommandMixin, Connection
             """
             if self.pool:
                 self.pool.disconnect()
+            aelog.debug("清理所有数据库连接池完毕！")
 
     # noinspection DuplicatedCode
     def init_engine(self, *, host: str = None, port: int = None, dbname: int = None, passwd: str = "",
@@ -150,6 +151,7 @@ class AIORdbClient(BaseStrictRedis, StrictRedis, ClusterCommandMixin, Connection
             """
             if self.pool:
                 self.pool.disconnect()
+            aelog.debug("清理所有数据库连接池完毕！")
 
     @contextmanager
     def catch_error(self, ) -> Generator[None, None, None]:

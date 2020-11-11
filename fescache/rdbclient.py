@@ -122,6 +122,7 @@ class RdbClient(BaseStrictRedis, Redis):
         """
         if self.pool:
             self.pool.disconnect()
+        aelog.debug("清理redis连接池完毕！")
 
     @contextmanager
     def catch_error(self, ) -> Generator[None, None, None]:
