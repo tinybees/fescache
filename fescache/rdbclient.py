@@ -13,7 +13,7 @@ from typing import Any, Dict, Generator, List, Optional, Union
 import aelog
 import redis
 import ujson
-from redis import Connection, ConnectionError, ConnectionPool, Redis, RedisError, TimeoutError
+from redis import ConnectionError, ConnectionPool, Redis, RedisError, TimeoutError
 
 from ._base import BaseStrictRedis, EXPIRED, SESSION_EXPIRED, Session
 from .err import FuncArgsError, RedisClientError, RedisConnectError, RedisTimeoutError
@@ -44,7 +44,6 @@ class RdbClient(BaseStrictRedis, Redis):
         self.kwargs: Dict = kwargs
         self.kwargs["socket_connect_timeout"] = connect_timeout
         self.pool: Optional[ConnectionPool] = None
-        self.connection: Optional[Connection] = None
         super().__init__(app, host=host, port=port, dbname=dbname, passwd=passwd, pool_size=pool_size)
 
     def init_app(self, app, *, host: str = None, port: int = None, dbname: int = None, passwd: str = "",
@@ -69,18 +68,11 @@ class RdbClient(BaseStrictRedis, Redis):
 
         # 初始化连接
         self.open_connection()
-
-        @atexit.register
-        def close_connection():
-            """
-            释放redis连接池所有连接
-            Args:
-
-            Returns:
-
-            """
-            if self.pool:
-                self.pool.disconnect()
+        # 注册退出方法
+        if getattr(app, "on_event", None):  # 适配fastapi
+            app.on_event('shutdown')(self.close_connection)
+        else:
+            atexit.register(self.close_connection)
 
     # noinspection DuplicatedCode
     def init_engine(self, *, host: str = None, port: int = None, dbname: int = None, passwd: str = "",
@@ -104,18 +96,8 @@ class RdbClient(BaseStrictRedis, Redis):
 
         # 初始化连接
         self.open_connection()
-
-        @atexit.register
-        def close_connection():
-            """
-            释放redis连接池所有连接
-            Args:
-
-            Returns:
-
-            """
-            if self.pool:
-                self.pool.disconnect()
+        # 注册退出方法
+        atexit.register(self.close_connection)
 
     def open_connection(self, ):
         """
@@ -129,6 +111,17 @@ class RdbClient(BaseStrictRedis, Redis):
         self.pool = redis.ConnectionPool(host=self.host, port=self.port, db=self.dbname, password=self.passwd,
                                          decode_responses=True, max_connections=self.pool_size, **self.kwargs)
         super(BaseStrictRedis, self).__init__(connection_pool=self.pool, decode_responses=True)
+
+    def close_connection(self, ):
+        """
+        释放redis连接池所有连接
+        Args:
+
+        Returns:
+
+        """
+        if self.pool:
+            self.pool.disconnect()
 
     @contextmanager
     def catch_error(self, ) -> Generator[None, None, None]:

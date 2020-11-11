@@ -91,6 +91,7 @@ class BaseStrictRedis(object):
         if app is not None:
             self.init_app(app, host=self.host, port=self.port, dbname=self.dbname, passwd=self.passwd,
                           pool_size=self.pool_size)
+        super().__init__()  # 混入类调用父类初始化方法
 
     def init_app(self, app, *, host: str = None, port: int = None, dbname: int = None, passwd: str = "",
                  pool_size: int = None):
@@ -107,12 +108,13 @@ class BaseStrictRedis(object):
 
         """
         self.app = app
+        config: Dict = app.config if getattr(app, "config", None) else app.state.config
 
-        self.host = host or app.config.get("FESCACHE_REDIS_HOST", None) or self.host
-        self.port = port or app.config.get("FESCACHE_REDIS_PORT", None) or self.port
-        self.dbname = dbname or app.config.get("FESCACHE_REDIS_DBNAME", None) or self.dbname
-        passwd = passwd or app.config.get("FESCACHE_REDIS_PASSWD", None) or self.passwd
-        self.pool_size = pool_size or app.config.get("FESCACHE_REDIS_POOL_SIZE", None) or self.pool_size
+        self.host = host or config.get("FESCACHE_REDIS_HOST", None) or self.host
+        self.port = port or config.get("FESCACHE_REDIS_PORT", None) or self.port
+        self.dbname = dbname or config.get("FESCACHE_REDIS_DBNAME", None) or self.dbname
+        passwd = passwd or config.get("FESCACHE_REDIS_PASSWD", None) or self.passwd
+        self.pool_size = pool_size or config.get("FESCACHE_REDIS_POOL_SIZE", None) or self.pool_size
         self.passwd = passwd if passwd is None else str(passwd)
 
     def init_engine(self, *, host: str = None, port: int = None, dbname: int = None, passwd: str = "",
