@@ -227,9 +227,11 @@ class RdbClient(BaseStrictRedis, Redis):
                 self.expire(session_data["account_id"], ex)
                 # 返回的键值对是否做load
                 session_data = self.responses_loads(is_load, session_data)
-                session_value = Session(session_data.pop('account_id'), session_id=session_data.pop('session_id'),
-                                        org_id=session_data.pop("org_id"), role_id=session_data.pop("role_id"),
-                                        menu_id=session_data.pop("menu_id"), **session_data)
+                session_value = Session(session_data.pop('account_id'),
+                                        session_id=session_data.pop('session_id'),
+                                        org_id=session_data.pop("org_id", None),
+                                        role_id=session_data.pop("role_id", None),
+                                        menu_id=session_data.pop("menu_id", None), **session_data)
         return session_value
 
     def verify(self, session_id: str) -> Session:
