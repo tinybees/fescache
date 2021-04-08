@@ -1,5 +1,11 @@
 ## fescache Changelog
 
+###[1.0.0] - 2021-4-8
+
+#### Added
+- session中增加数据ID用于数据权限的存储.
+
+
 ###[1.0.0b6] - 2020-12-21
 
 #### Changed

@@ -40,16 +40,18 @@ class Session(object):
                  org_id: str = None,
                  role_id: str = None,
                  menu_id: str = None,
+                 data_id: str = None,
                  static_route_id: str = None,
                  dynamic_route_id: str = None,
                  **kwargs):
-        self.account_id = account_id  # 账户ID
-        self.session_id = secrets.token_urlsafe() if not session_id else session_id  # session ID
-        self.org_id = org_id or uuid.uuid4().hex  # 账户的组织结构在redis中的ID
-        self.role_id = role_id or uuid.uuid4().hex  # 账户的角色在redis中的ID
-        self.menu_id = menu_id or uuid.uuid4().hex  # 账户的页面菜单权限在redis中的ID
-        self.static_route_id = static_route_id or uuid.uuid4().hex  # 账户的静态权限在redis中的ID
-        self.dynamic_route_id = dynamic_route_id or uuid.uuid4().hex  # 账户的动态权限在redis中的ID
+        self.account_id: str = account_id  # 账户ID
+        self.session_id: str = secrets.token_urlsafe() if not session_id else session_id  # session ID
+        self.org_id: str = org_id or uuid.uuid4().hex  # 账户的组织结构在redis中的ID
+        self.role_id: str = role_id or uuid.uuid4().hex  # 账户的角色在redis中的ID
+        self.menu_id: str = menu_id or uuid.uuid4().hex  # 账户的页面菜单权限在redis中的ID
+        self.data_id: str = data_id or uuid.uuid4().hex  # 账户的数据权限在redis中的ID
+        self.static_route_id: str = static_route_id or uuid.uuid4().hex  # 账户的静态权限在redis中的ID
+        self.dynamic_route_id: str = dynamic_route_id or uuid.uuid4().hex  # 账户的动态权限在redis中的ID
         for k, v in kwargs.items():
             setattr(self, k, v)
 
@@ -189,5 +191,6 @@ class BaseStrictRedis(object):
         Returns:
 
         """
-        return [session_data.session_id, session_data.account_id, session_data.org_id, session_data.role_id,
-                session_data.menu_id, session_data.static_route_id, session_data.dynamic_route_id]
+        return [session_data.account_id, session_data.session_id, session_data.org_id, session_data.role_id,
+                session_data.menu_id, session_data.data_id, session_data.static_route_id,
+                session_data.dynamic_route_id]
