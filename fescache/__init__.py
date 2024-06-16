@@ -11,7 +11,7 @@ from .utils import *
 from ._base import *
 
 __all__ = (
-    "ignore_error",
+    "ignore_error", "ordumps", "orloads",
 
     "Session", "LONG_EXPIRED", "SHORT_EXPIRED", "EXPIRED", "SESSION_EXPIRED", "DAY3_EXPIRED", "DAY7_EXPIRED",
     "DAY15_EXPIRED", "DAY30_EXPIRED",
@@ -19,4 +19,4 @@ __all__ = (
     "__version__",
 )
 
-__version__ = "1.0.0"
+__version__ = "1.1.0"

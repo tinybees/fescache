@@ -8,16 +8,16 @@
 """
 import atexit
 from contextlib import contextmanager
-from typing import Any, Dict, Generator, List, Optional, Union
+from typing import Any, Dict, Generator, List, Optional, Sequence, Union
 
 import aelog
+# noinspection Mypy
 import redis
-import ujson
 from redis import ConnectionError, ConnectionPool, Redis, RedisError, TimeoutError
 
 from ._base import BaseStrictRedis, EXPIRED, SESSION_EXPIRED, Session
 from .err import FuncArgsError, RedisClientError, RedisConnectError, RedisTimeoutError
-from .utils import ignore_error
+from .utils import ignore_error, ordumps, orloads
 
 __all__ = ("RdbClient",)
 
@@ -28,7 +28,7 @@ class RdbClient(BaseStrictRedis, Redis):
     """
 
     def __init__(self, app=None, *, host: str = "127.0.0.1", port: int = 6379, dbname: int = 0, passwd: str = "",
-                 pool_size: int = 50, connect_timeout: int = 10, **kwargs) -> None:
+                 pool_size: int = 25, connect_timeout: int = 10, **kwargs) -> None:
         """
         redis 工具类
         Args:
@@ -41,30 +41,22 @@ class RdbClient(BaseStrictRedis, Redis):
             connect_timeout: 连接超时时间
             kwargs: other kwargs
         """
-        self.kwargs: Dict = kwargs
-        self.kwargs["socket_connect_timeout"] = connect_timeout
         self.pool: Optional[ConnectionPool] = None
+
+        kwargs.setdefault("socket_connect_timeout", connect_timeout)
+        self.kwargs: Dict[str, Any] = kwargs
+
         super().__init__(app, host=host, port=port, dbname=dbname, passwd=passwd, pool_size=pool_size)
 
-    def init_app(self, app, *, host: str = None, port: int = None, dbname: int = None, passwd: str = "",
-                 pool_size: int = None, connect_timeout: int = 10, **kwargs) -> None:
+    def init_app(self, app) -> None:
         """
         redis 工具类
         Args:
             app: app应用
-            host:redis host
-            port:redis port
-            dbname: database name
-            passwd: redis password
-            pool_size: redis pool size
-            connect_timeout: 连接超时时间
-            kwargs: other kwargs
         Returns:
 
         """
-        self.kwargs.update(kwargs)
-        self.kwargs["socket_connect_timeout"] = connect_timeout
-        super().init_app(app, host=host, port=port, dbname=dbname, passwd=passwd, pool_size=pool_size)
+        super().init_app(app)
 
         # 初始化连接
         self.open_connection()
@@ -75,8 +67,8 @@ class RdbClient(BaseStrictRedis, Redis):
             atexit.register(self.close_connection)
 
     # noinspection DuplicatedCode
-    def init_engine(self, *, host: str = None, port: int = None, dbname: int = None, passwd: str = "",
-                    pool_size: int = None, connect_timeout: int = 10, **kwargs) -> None:
+    def init_engine(self, *, host: str = "127.0.0.1", port: int = 6379, dbname: int = 0, passwd: str = "",
+                    pool_size: int = 25, connect_timeout: int = 10, **kwargs) -> None:
         """
         redis 工具类
         Args:
@@ -90,8 +82,8 @@ class RdbClient(BaseStrictRedis, Redis):
         Returns:
 
         """
+        kwargs.setdefault("socket_connect_timeout", connect_timeout)
         self.kwargs.update(kwargs)
-        self.kwargs["socket_connect_timeout"] = connect_timeout
         super().init_engine(host=host, port=port, dbname=dbname, passwd=passwd, pool_size=pool_size)
 
         # 初始化连接
@@ -145,12 +137,11 @@ class RdbClient(BaseStrictRedis, Redis):
             aelog.exception(e)
             raise RedisClientError("Redis其他错误,请检查.")
 
-    def save_session(self, session: Session, is_dump: bool = False, ex: int = SESSION_EXPIRED) -> str:
+    def save_session(self, session: Session, ex: int = SESSION_EXPIRED) -> str:
         """
         利用hash map保存session
         Args:
             session: Session 实例
-            is_dump: 是否对每个键值进行dump
             ex: 过期时间，单位秒
         Returns:
 
@@ -158,13 +149,11 @@ class RdbClient(BaseStrictRedis, Redis):
         if not isinstance(session, Session):
             raise FuncArgsError(f"session value error, must be Session Type.")
 
-        session_data: Dict[str, Any] = self.response_dumps(is_dump, session.to_dict())
-
         with self.catch_error():
-            self.hmset(session.session_id, session_data)
+            self.hset(session.session_id, mapping=self.rs_dumps(session.to_dict()))
             self.expire(session.session_id, ex)
         # 清除老的令牌
-        old_session_id = self.get_usual_data(session.account_id, is_load=False)
+        old_session_id = self.get_usual_data(session.account_id)
         if old_session_id:
             with ignore_error():
                 self.delete_session(str(old_session_id))
@@ -184,38 +173,32 @@ class RdbClient(BaseStrictRedis, Redis):
 
         with self.catch_error():
             session_data = self.get_session(session_id)
-            if session_data:
-                with ignore_error():  # 删除已经存在的和账户相关的缓存key
-                    self.delete_keys(self._get_session_keys(session_data))
+        if session_data:
+            with ignore_error():  # 删除已经存在的和账户相关的缓存key
+                self.delete_keys(self._get_session_keys(session_data))
 
-    def update_session(self, session: Session, is_dump: bool = False,
-                       ex: int = SESSION_EXPIRED) -> None:
+    def update_session(self, session: Session, ex: int = SESSION_EXPIRED) -> None:
         """
         利用hash map更新session
         Args:
             session: Session实例
-            is_dump: 是否对每个键值进行dump
             ex: 过期时间，单位秒
         Returns:
 
         """
-        session_data = self.response_dumps(is_dump, session.to_dict())
-
         with self.catch_error():
-            self.hmset(session.session_id, session_data)
+            self.hset(session.session_id, mapping=self.rs_dumps(session.to_dict()))
             self.expire(session.session_id, ex)
             self.expire(session.account_id, ex)
-            # 更新令牌
-            self.save_hash_data(session.account_id, session.session_id, ex=ex)
+        # 更新令牌
+        self.save_hash_data(session.account_id, session.session_id, ex=ex)
 
-    def get_session(self, session_id: str, ex: int = SESSION_EXPIRED,
-                    is_load: bool = False) -> Optional[Session]:
+    def get_session(self, session_id: str, ex: int = SESSION_EXPIRED) -> Optional[Session]:
         """
         获取session
         Args:
             session_id: session id
             ex: 过期时间，单位秒
-            is_load: 结果的键值是否进行load
         Returns:
 
         """
@@ -224,14 +207,9 @@ class RdbClient(BaseStrictRedis, Redis):
             session_data = self.hgetall(session_id)
             if session_data:
                 self.expire(session_id, ex)
+                session_data = self.rs_loads(session_data)
                 self.expire(session_data["account_id"], ex)
-                # 返回的键值对是否做load
-                session_data = self.responses_loads(is_load, session_data)
-                session_value = Session(session_data.pop('account_id'),
-                                        session_id=session_data.pop('session_id'),
-                                        org_id=session_data.pop("org_id", None),
-                                        role_id=session_data.pop("role_id", None),
-                                        menu_id=session_data.pop("menu_id", None), **session_data)
+                session_value = Session(session_data.pop('account_id'), **session_data)
         return session_value
 
     def verify(self, session_id: str) -> Session:
@@ -248,65 +226,54 @@ class RdbClient(BaseStrictRedis, Redis):
         return session
 
     # noinspection DuplicatedCode
-    def save_hash_data(self, name: str, hash_data: Union[Dict, str], field_name: str = None,
-                       is_dump: bool = False, ex: int = EXPIRED) -> str:
+    def save_hash_data(self, name: str, hash_data: Any, field_name: str = "", ex: int = EXPIRED) -> None:
         """
         获取hash对象field_name对应的值
         Args:
             name: redis hash key的名称
             field_name: 保存的hash mapping 中的某个字段
             hash_data: 获取的hash对象中属性的名称
-            is_dump: 是否对每个键值进行dump
             ex: 过期时间，单位秒
         Returns:
             反序列化对象
         """
         with self.catch_error():
             if field_name:
-                hash_data = hash_data if isinstance(hash_data, str) else ujson.dumps(hash_data)
-                self.hset(name, field_name, hash_data)
+                self.hset(name, field_name, hash_data if isinstance(hash_data, str) else ordumps(hash_data))
             else:
                 if not isinstance(hash_data, Dict):
                     raise ValueError("hash data error, must be MutableMapping.")
                 # 是否对每个键值进行dump
-                hash_data = self.response_dumps(is_dump, hash_data)
-                self.hmset(name, hash_data)
-
+                self.hset(name, mapping=self.rs_dumps(hash_data))
             # 设置过期时间
             self.expire(name, ex)
 
-        return name
-
-    def get_hash_data(self, name: str, field_name: str = None, ex: int = EXPIRED,
-                      is_load: bool = False) -> Union[Dict, str, None]:
+    def get_hash_data(self, name: str, field_name: str = "", ex: int = EXPIRED) -> Any:
         """
         获取hash对象field_name对应的值
         Args:
             name: redis hash key的名称
             field_name: 获取的hash对象中属性的名称
             ex: 过期时间，单位秒
-            is_load: 结果的键值是否进行load
         Returns:
             反序列化对象
         """
         with self.catch_error():
             if field_name:
                 hash_data = self.hget(name, field_name)
-                # 返回的键值对是否做load
-                if hash_data and is_load:
-                    with ignore_error():
-                        hash_data = ujson.loads(hash_data)
+                if hash_data:
+                    hash_data = orloads(hash_data)
             else:
                 hash_data = self.hgetall(name)
-                # 返回的键值对是否做load
                 if hash_data:
-                    hash_data = self.responses_loads(is_load, hash_data)
+                    hash_data = self.rs_loads(hash_data)
             # 设置过期时间
             self.expire(name, ex)
 
         return hash_data
 
-    def get_list_data(self, name: str, start: int = 0, end: int = -1, ex: int = EXPIRED) -> Optional[List]:
+    def get_list_data(self, name: str, start: int = 0, end: int = -1, ex: int = EXPIRED
+                      ) -> Optional[List[Union[str, int, float]]]:
         """
         获取redis的列表中的数据
         Args:
@@ -324,8 +291,8 @@ class RdbClient(BaseStrictRedis, Redis):
 
         return data
 
-    def save_list_data(self, name: str, list_data: Union[List, str], save_to_left: bool = True,
-                       ex: int = EXPIRED) -> str:
+    def save_list_data(self, name: str, list_data: Union[List[Union[str, int, float]], Union[str, int, float]],
+                       save_to_left: bool = True, ex: int = EXPIRED) -> None:
         """
         保存数据到redis的列表中
         Args:
@@ -345,9 +312,7 @@ class RdbClient(BaseStrictRedis, Redis):
             # 设置过期时间
             self.expire(name, ex)
 
-        return name
-
-    def save_usual_data(self, name: str, value: Any, ex: int = EXPIRED) -> str:
+    def save_usual_data(self, name: str, value: Any, ex: int = EXPIRED) -> None:
         """
         保存列表、映射对象为普通的字符串
         Args:
@@ -357,35 +322,27 @@ class RdbClient(BaseStrictRedis, Redis):
         Returns:
 
         """
-        value = ujson.dumps(value) if not isinstance(value, str) else value
         with self.catch_error():
-            self.set(name, value, ex)
-        return name
+            self.set(name, ordumps(value) if not isinstance(value, str) else value, ex)
 
-    def get_usual_data(self, name: str, is_load: bool = True, ex: int = EXPIRED
-                       ) -> Union[Dict, str, None]:
+    def get_usual_data(self, name: str, ex: int = EXPIRED) -> Any:
         """
         获取name对应的值
         Args:
             name: redis key的名称
-            is_load: 是否转码默认转码
             ex: 过期时间，单位秒
         Returns:
             反序列化对象
         """
         with self.catch_error():
             data = self.get(name)
-
             if data:  # 保证key存在时设置过期时间
                 self.expire(name, ex)
-
-                if is_load:
-                    with ignore_error():
-                        data = ujson.loads(data)
+                data = orloads(data)
 
         return data
 
-    def incrbynumber(self, name: str, amount: int = 1, ex: int = EXPIRED) -> str:
+    def incrbynumber(self, name: str, amount: int = 1, ex: int = EXPIRED) -> None:
         """
         通过给定的值对已有的值进行递增
         Args:
@@ -400,7 +357,6 @@ class RdbClient(BaseStrictRedis, Redis):
                 self.incrbyfloat(name, amount)
             # 增加过期时间
             self.expire(name, ex)
-        return name
 
     def is_exists(self, name: str) -> bool:
         """
@@ -414,7 +370,7 @@ class RdbClient(BaseStrictRedis, Redis):
             rs = self.exists(name)
         return True if rs else False
 
-    def delete_keys(self, names: List[str]) -> None:
+    def delete_keys(self, names: Sequence[str]) -> None:
         """
         删除一个或多个redis key
         Args:
@@ -426,7 +382,7 @@ class RdbClient(BaseStrictRedis, Redis):
         with self.catch_error():
             self.delete(*names)
 
-    def get_keys(self, pattern_name: str) -> List:
+    def get_keys(self, pattern_name: str) -> List[str]:
         """
         根据正则表达式获取redis的keys
         Args:
@@ -437,3 +393,23 @@ class RdbClient(BaseStrictRedis, Redis):
         with self.catch_error():
             rs = self.keys(pattern_name)
         return rs
+
+    def memory_help(self, **kwargs):
+        """memory_help"""
+        pass
+
+    def memory_doctor(self, **kwargs):
+        """memory_doctor"""
+        pass
+
+    def debug_segfault(self, **kwargs):
+        """debug_segfault"""
+        pass
+
+    def script_debug(self, *args):
+        """script_debug"""
+        pass
+
+    def command_info(self, **kwargs):
+        """command_info"""
+        pass

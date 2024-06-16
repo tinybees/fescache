@@ -8,15 +8,12 @@
 """
 import secrets
 import uuid
+from typing import Any, Dict, Optional, Union
+
+from .utils import ordumps, orloads
 
 __all__ = ("Session", "LONG_EXPIRED", "EXPIRED", "SESSION_EXPIRED", "DAY3_EXPIRED", "DAY7_EXPIRED",
            "DAY15_EXPIRED", "DAY30_EXPIRED", "SHORT_EXPIRED", "BaseStrictRedis")
-
-from typing import Dict, Any
-
-import ujson
-
-from fescache import ignore_error
 
 SESSION_EXPIRED: int = 30 * 60  # session过期时间
 SHORT_EXPIRED: int = 60 * 60  # 短session过期时间
@@ -35,24 +32,38 @@ class Session(object):
 
     """
 
-    def __init__(self, account_id: str, *,
-                 session_id: str = None,
-                 org_id: str = None,
-                 role_id: str = None,
-                 menu_id: str = None,
-                 data_id: str = None,
-                 static_route_id: str = None,
-                 dynamic_route_id: str = None,
-                 **kwargs):
+    def __init__(self, account_id: str, *, user_name: str = "", account_type: str = "", user_id: str = "",
+                 full_name: str = "", org_id: str = "", org_name: str = "", org_type: str = "",
+                 org_level: Optional[int] = None, regiona_no: str = "", gather_orgnos: Optional[Dict[str, str]] = None,
+                 department_no: str = "", department_name: str = "", department_type: str = "",
+                 department_level: Optional[int] = None, **kwargs):
+        # 用户信息
         self.account_id: str = account_id  # 账户ID
-        self.session_id: str = secrets.token_urlsafe() if not session_id else session_id  # session ID
-        self.org_id: str = org_id or uuid.uuid4().hex  # 账户的组织结构在redis中的ID
-        self.role_id: str = role_id or uuid.uuid4().hex  # 账户的角色在redis中的ID
-        self.menu_id: str = menu_id or uuid.uuid4().hex  # 账户的页面菜单权限在redis中的ID
-        self.data_id: str = data_id or uuid.uuid4().hex  # 账户的数据权限在redis中的ID
-        self.static_route_id: str = static_route_id or uuid.uuid4().hex  # 账户的静态权限在redis中的ID
-        self.dynamic_route_id: str = dynamic_route_id or uuid.uuid4().hex  # 账户的动态权限在redis中的ID
-        for k, v in kwargs.items():
+        self.user_name: str = user_name
+        self.account_type: str = account_type
+        self.user_id: str = user_id
+        self.full_name: str = full_name
+        # 组织信息
+        self.org_id: str = org_id
+        self.org_name: str = org_name
+        self.org_type: str = org_type
+        self.org_level: Optional[int] = org_level
+        self.regiona_no: str = regiona_no
+        self.gather_orgnos: Dict[str, str] = gather_orgnos or {}
+        self.department_no: str = department_no
+        self.department_name: str = department_name
+        self.department_type: str = department_type
+        self.department_level: Optional[int] = department_level
+        # session信息
+        self.session_id: str = secrets.token_urlsafe()  # session ID
+        self.role_id: str = uuid.uuid4().hex  # 账户的角色在redis中的ID
+        self.menu_id: str = uuid.uuid4().hex  # 账户的页面菜单权限在redis中的ID
+        self.data_id: str = uuid.uuid4().hex  # 账户的数据权限在redis中的ID
+        self.static_route_id: str = uuid.uuid4().hex  # 账户的静态权限在redis中的ID
+        self.dynamic_route_id: str = uuid.uuid4().hex  # 账户的动态权限在redis中的ID
+        # 其他信息
+        self.kwargs: Dict[str, Any] = {**kwargs}
+        for k, v in self.kwargs.items():
             setattr(self, k, v)
 
     def to_dict(self, ) -> Dict:
@@ -72,7 +83,7 @@ class BaseStrictRedis(object):
     """
 
     def __init__(self, app=None, *, host: str = "127.0.0.1", port: int = 6379, dbname: int = 0, passwd: str = "",
-                 pool_size: int = 50):
+                 pool_size: int = 25):
         """
         redis 基类
         Args:
@@ -84,43 +95,35 @@ class BaseStrictRedis(object):
             pool_size: redis pool size
         """
         self.app = app
-        self.host = host
-        self.port = port
-        self.dbname = dbname
-        self.passwd = passwd
-        self.pool_size = pool_size
+        self.host: str = host
+        self.port: int = port
+        self.dbname: int = dbname
+        self.passwd: str = passwd
+        self.pool_size: int = pool_size
 
         if app is not None:
-            self.init_app(app, host=self.host, port=self.port, dbname=self.dbname, passwd=self.passwd,
-                          pool_size=self.pool_size)
+            self.init_app(app)
         super().__init__()  # 混入类调用父类初始化方法
 
-    def init_app(self, app, *, host: str = None, port: int = None, dbname: int = None, passwd: str = "",
-                 pool_size: int = None):
+    def init_app(self, app, ) -> None:
         """
         redis 非阻塞工具类
         Args:
             app: app应用
-            host:redis host
-            port:redis port
-            dbname: database name
-            passwd: redis password
-            pool_size: redis pool size
         Returns:
 
         """
         self.app = app
-        config: Dict = app.config if getattr(app, "config", None) else app.state.config
+        config: Dict[str, Union[str, int]] = app.config if getattr(app, "config", None) else app.state.config
 
-        self.host = host or config.get("FESCACHE_REDIS_HOST", None) or self.host
-        self.port = port or config.get("FESCACHE_REDIS_PORT", None) or self.port
-        self.dbname = dbname or config.get("FESCACHE_REDIS_DBNAME", None) or self.dbname
-        passwd = passwd or config.get("FESCACHE_REDIS_PASSWD", None) or self.passwd
-        self.pool_size = pool_size or config.get("FESCACHE_REDIS_POOL_SIZE", None) or self.pool_size
-        self.passwd = passwd if passwd is None else str(passwd)
+        self.host = str(config.get("FESCACHE_REDIS_HOST", self.host)) or self.host
+        self.port = int(config.get("FESCACHE_REDIS_PORT", self.port)) or self.port
+        self.dbname = int(config.get("FESCACHE_REDIS_DBNAME", self.dbname)) or self.dbname
+        self.passwd = str(config.get("FESCACHE_REDIS_PASSWD", self.passwd)) or self.passwd
+        self.pool_size = int(config.get("FESCACHE_REDIS_POOL_SIZE", self.pool_size)) or self.pool_size
 
-    def init_engine(self, *, host: str = None, port: int = None, dbname: int = None, passwd: str = "",
-                    pool_size: int = None):
+    def init_engine(self, *, host: str = "127.0.0.1", port: int = 6379, dbname: int = 0, passwd: str = "",
+                    pool_size: int = 25):
         """
         redis 非阻塞工具类
         Args:
@@ -135,52 +138,31 @@ class BaseStrictRedis(object):
         self.host = host or self.host
         self.port = port or self.port
         self.dbname = dbname or self.dbname
-        passwd = passwd or self.passwd
+        self.passwd = passwd or self.passwd
         self.pool_size = pool_size or self.pool_size
 
-        self.passwd = passwd if passwd is None else str(passwd)
-
     @staticmethod
-    def response_dumps(is_dump: bool, hash_data: Dict) -> Dict[str, Any]:
+    def rs_dumps(hash_data: Dict[str, Any]) -> Dict[str, str]:
         """
         结果dump
         Args:
-            is_dump: 是否dump
             hash_data: hash data
         Returns:
 
         """
-        # 是否对每个键值进行dump
-        if is_dump:
-            hash_data_ = {}
-            for hash_key, hash_val in hash_data.items():
-                if not isinstance(hash_val, str):
-                    with ignore_error():
-                        hash_val = ujson.dumps(hash_val)
-                hash_data_[hash_key] = hash_val
-            hash_data = hash_data_
-
-        return hash_data
+        return {hash_key: ordumps(hash_val) if not isinstance(hash_val, str) else hash_val
+                for hash_key, hash_val in hash_data.items()}
 
     @staticmethod
-    def responses_loads(is_load: bool, hash_data: Dict):
+    def rs_loads(hash_data: Dict[str, str]) -> Dict[str, Any]:
         """
         结果load
         Args:
-            is_load: 是否load
             hash_data: hash data
         Returns:
 
         """
-        if is_load:
-            hash_data_ = {}
-            for hash_key, hash_val in hash_data.items():
-                with ignore_error():
-                    hash_val = ujson.loads(hash_val)
-                hash_data_[hash_key] = hash_val
-            hash_data = hash_data_
-
-        return hash_data
+        return {hash_key: orloads(hash_val) for hash_key, hash_val in hash_data.items()}
 
     @staticmethod
     def _get_session_keys(session_data: Session):
@@ -191,6 +173,6 @@ class BaseStrictRedis(object):
         Returns:
 
         """
-        return [session_data.account_id, session_data.session_id, session_data.org_id, session_data.role_id,
+        return [session_data.account_id, session_data.session_id, session_data.role_id,
                 session_data.menu_id, session_data.data_id, session_data.static_route_id,
                 session_data.dynamic_route_id]
