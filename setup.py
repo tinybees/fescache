@@ -38,7 +38,7 @@ setup(name='fescache',
       url='https://github.com/tinybees/fescache',
       packages=['fescache', ],
       entry_points={},
-      install_requires=['aelog>=1.0.6,<=1.0.9', 'orjson<=3.6.1', ],
+      install_requires=['aelog>=1.0.6,<=1.0.9', 'orjson>=3.6.1', ],
       extras_require={
           "async": ['aredis>=1.1.3,<=1.1.8', 'hiredis<=2.0.0', ],
           "sync": ['redis>=3.5.3,<=4.1.4', ],
