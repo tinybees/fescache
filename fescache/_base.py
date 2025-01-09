@@ -36,7 +36,7 @@ class Session(object):
                  full_name: str = "", org_id: str = "", org_name: str = "", org_type: str = "",
                  org_level: Optional[int] = None, regiona_no: str = "", gather_orgnos: Optional[Dict[str, str]] = None,
                  department_no: str = "", department_name: str = "", department_type: str = "",
-                 department_level: Optional[int] = None, **kwargs):
+                 department_level: Optional[int] = None, project_id: str = "", **kwargs):
         # 用户信息
         self.account_id: str = account_id  # 账户ID
         self.user_name: str = user_name
@@ -49,7 +49,6 @@ class Session(object):
         self.org_type: str = org_type
         self.org_level: Optional[int] = org_level
         self.regiona_no: str = regiona_no
-        self.gather_orgnos: Dict[str, str] = gather_orgnos or {}
         self.department_no: str = department_no
         self.department_name: str = department_name
         self.department_type: str = department_type
@@ -61,6 +60,9 @@ class Session(object):
         self.data_id: str = uuid.uuid4().hex  # 账户的数据权限在redis中的ID
         self.static_route_id: str = uuid.uuid4().hex  # 账户的静态权限在redis中的ID
         self.dynamic_route_id: str = uuid.uuid4().hex  # 账户的动态权限在redis中的ID
+        # 项目信息
+        self.gather_orgnos: Dict[str, str] = gather_orgnos or {}
+        self.project_id: str = project_id
         # 其他信息
         self.kwargs: Dict[str, Any] = {**kwargs}
         for k, v in self.kwargs.items():

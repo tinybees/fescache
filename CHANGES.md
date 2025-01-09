@@ -1,5 +1,12 @@
 ## fescache Changelog
 
+###[1.1.2] - 2025-01-09
+
+#### Changed
+
+- 鉴权Session中增加和项目相关的project_id参数
+
+
 ###[1.1.1] - 2025-01-03
 
 #### Changed
