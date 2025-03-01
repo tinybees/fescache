@@ -89,7 +89,7 @@ class Session(object):
         """
         if value is None:
             return value
-        elif value == "None":
+        elif value in ("None", ""):
             return None
         else:
             return int(value)
